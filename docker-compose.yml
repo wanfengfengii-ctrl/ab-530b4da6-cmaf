@@ -1,0 +1,35 @@
+name: playlist-audit
+
+x-service: &service
+  build: .
+  image: playlist-audit:latest
+
+services:
+  api:
+    <<: *service
+    # Host port is configurable: API_PORT=9000 docker compose up
+    ports:
+      - "${API_PORT:-8080}:8000"
+    environment:
+      PORT: 8000
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # One-shot gate: waits for the API to be healthy, then runs code tests,
+  # the build check and API smoke tests; its exit code summarizes the result.
+  verify:
+    <<: *service
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_BASE_URL: http://api:8000
+    command: ["python", "-m", "app.verify"]
